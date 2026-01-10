@@ -1,0 +1,197 @@
+package in.bkitsolutions.lmsbackend.service;
+
+import in.bkitsolutions.lmsbackend.model.*;
+import in.bkitsolutions.lmsbackend.repository.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class AttemptService {
+    private final TestRepository testRepository;
+    private final TestAttemptRepository testAttemptRepository;
+    private final QuestionRepository questionRepository;
+    private final AnswerRepository answerRepository;
+    private final UserRepository userRepository;
+
+    public AttemptService(TestRepository testRepository, TestAttemptRepository testAttemptRepository,
+                          QuestionRepository questionRepository, AnswerRepository answerRepository,
+                          UserRepository userRepository) {
+        this.testRepository = testRepository;
+        this.testAttemptRepository = testAttemptRepository;
+        this.questionRepository = questionRepository;
+        this.answerRepository = answerRepository;
+        this.userRepository = userRepository;
+    }
+
+    private User requireUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+    }
+
+    private void ensureActiveWindow(TestEntity test) {
+        LocalDateTime now = LocalDateTime.now();
+        if (Boolean.FALSE.equals(test.getPublished())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not published");
+        }
+        if (test.getStartTime() != null && now.isBefore(test.getStartTime())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not started yet");
+        }
+        if (test.getEndTime() != null && now.isAfter(test.getEndTime())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test has ended");
+        }
+    }
+
+    public TestAttempt startAttempt(String requesterEmail, Long testId) {
+        User requester = requireUser(requesterEmail);
+        if (requester.getType() != UserType.USER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only users can start attempts");
+        }
+        TestEntity test = testRepository.findById(testId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
+        // Only tests created by student's admin are visible
+        User admin = requester.getCreatedBy();
+        if (admin == null || !admin.getId().equals(test.getCreatedBy().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not assigned to you");
+        }
+        ensureActiveWindow(test);
+
+        int maxAttempts = (test.getMaxAttempts() == null || test.getMaxAttempts() <= 0) ? 1 : test.getMaxAttempts();
+        int lastAttemptNumber = testAttemptRepository
+                .findTopByTestAndStudentOrderByAttemptNumberDesc(test, requester)
+                .map(TestAttempt::getAttemptNumber).orElse(0);
+        if (lastAttemptNumber >= maxAttempts) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Max attempts reached");
+        }
+        TestAttempt attempt = TestAttempt.builder()
+                .test(test)
+                .student(requester)
+                .attemptNumber(lastAttemptNumber + 1)
+                .startedAt(LocalDateTime.now())
+                .completed(false)
+                .score(0)
+                .build();
+        return testAttemptRepository.save(attempt);
+    }
+
+    public Answer submitOrUpdateAnswer(String requesterEmail, Long attemptId, Long questionId, String answerText) {
+        User requester = requireUser(requesterEmail);
+        TestAttempt attempt = testAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
+        if (!attempt.getStudent().getId().equals(requester.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your attempt");
+        }
+        if (Boolean.TRUE.equals(attempt.getCompleted())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Attempt already completed");
+        }
+        TestEntity test = attempt.getTest();
+        // Only allow answering while test is active
+        ensureActiveWindow(test);
+
+        Question question = questionRepository.findById(questionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question not found"));
+        if (!question.getTest().getId().equals(test.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Question not part of this test");
+        }
+
+        boolean isCorrect = evaluateCorrectness(question, answerText);
+        Answer answer = answerRepository.findByAttemptAndQuestion(attempt, question)
+                .orElse(Answer.builder().attempt(attempt).question(question).build());
+        answer.setAnswerText(answerText);
+        answer.setCorrect(isCorrect);
+        return answerRepository.save(answer);
+    }
+
+    public TestAttempt submitAttempt(String requesterEmail, Long attemptId) {
+        User requester = requireUser(requesterEmail);
+        TestAttempt attempt = testAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
+        if (!attempt.getStudent().getId().equals(requester.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your attempt");
+        }
+        if (Boolean.TRUE.equals(attempt.getCompleted())) {
+            return attempt; // idempotent
+        }
+        // After end time we still allow finalization but not new answers (handled earlier)
+        int score = computeScore(attempt);
+        attempt.setScore(score);
+        attempt.setSubmittedAt(LocalDateTime.now());
+        attempt.setCompleted(true);
+        return testAttemptRepository.save(attempt);
+    }
+
+    public TestAttempt getAttempt(String requesterEmail, Long attemptId) {
+        User requester = requireUser(requesterEmail);
+        TestAttempt attempt = testAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
+        if (requester.getType() == UserType.USER && !attempt.getStudent().getId().equals(requester.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your attempt");
+        }
+        return attempt;
+    }
+
+    private int computeScore(TestAttempt attempt) {
+        List<Answer> answers = answerRepository.findByAttempt(attempt);
+        int total = 0;
+        for (Answer a : answers) {
+            Question q = a.getQuestion();
+            int marks = (q.getMarks() == null || q.getMarks() <= 0) ? 1 : q.getMarks();
+            int negative = (q.getNegativeMarks() == null || q.getNegativeMarks() < 0) ? 0 : q.getNegativeMarks();
+            if (Boolean.TRUE.equals(a.getCorrect())) {
+                total += marks;
+            } else {
+                total -= negative;
+            }
+        }
+        return Math.max(total, 0); // avoid negative total score
+    }
+
+    private boolean evaluateCorrectness(Question question, String rawAnswer) {
+        if (rawAnswer == null) return false;
+        QuestionType type = question.getQuestionType();
+        if (type == QuestionType.FILL_BLANK) {
+            String expected = normalizeFillBlank(question.getCorrectAnswer());
+            String actual = normalizeFillBlank(rawAnswer);
+            return expected.equals(actual);
+        }
+
+        String ans = rawAnswer.trim().toUpperCase();
+        if (type == QuestionType.MAQ) {
+            // Multiple-answer question: compare sets order-agnostically
+            String multi = question.getCorrectOptionsCsv();
+            if (multi == null || multi.isBlank()) return false;
+            Set<String> expected = Arrays.stream(multi.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).map(String::toUpperCase).collect(Collectors.toSet());
+            Set<String> actual = Arrays.stream(ans.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).map(String::toUpperCase).collect(Collectors.toSet());
+            return expected.equals(actual);
+        }
+
+        // MCQ: default single-correct; for backward compatibility we still accept multi if configured
+        String single = question.getCorrectOption();
+        String multi = question.getCorrectOptionsCsv();
+        if (multi != null && !multi.isBlank()) {
+            Set<String> expected = Arrays.stream(multi.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).map(String::toUpperCase).collect(Collectors.toSet());
+            Set<String> actual = Arrays.stream(ans.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).map(String::toUpperCase).collect(Collectors.toSet());
+            return expected.equals(actual);
+        } else if (single != null && !single.isBlank()) {
+            return ans.equals(single.trim().toUpperCase());
+        }
+        return false;
+    }
+
+    private String normalizeFillBlank(String s) {
+        if (s == null) return "";
+        // remove dashes and underscores, collapse spaces, lowercase
+        String t = s.replaceAll("[-_]", " ");
+        t = t.trim().replaceAll("\\s+", " ");
+        t = t.replace(" ", ""); // remove spaces to compare by letters only
+        return t.toLowerCase();
+    }
+}

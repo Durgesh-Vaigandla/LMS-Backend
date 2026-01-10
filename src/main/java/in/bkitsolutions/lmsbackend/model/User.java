@@ -29,4 +29,8 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserType type; // SUPERADMIN, ADMIN, USER
+
+    @ManyToOne
+    @JoinColumn(name = "created_by")
+    private User createdBy; // SUPERADMIN → ADMIN → STUDENT
 }

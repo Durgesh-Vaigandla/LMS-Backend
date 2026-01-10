@@ -60,6 +60,8 @@ public class AuthService {
                 .email(req.getEmail())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .type(UserType.ADMIN)
+                // Track who created this admin (should be SUPERADMIN)
+                .createdBy(requester)
                 .build();
         return userRepository.save(admin);
     }
@@ -77,6 +79,8 @@ public class AuthService {
                 .email(req.getEmail())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .type(UserType.USER)
+                // Track who created this user (ADMIN or SUPERADMIN)
+                .createdBy(requester)
                 .build();
         return userRepository.save(user);
     }
