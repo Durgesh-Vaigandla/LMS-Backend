@@ -55,4 +55,30 @@ public class AuthDtos {
         @Size(min = 6)
         private String password;
     }
+
+    // New: initialize the single ROOTADMIN
+    @Data
+    public static class InitRootAdminRequest {
+        @NotBlank
+        private String name;
+        @Email
+        @NotBlank
+        private String email;
+        @NotBlank
+        @Size(min = 6)
+        private String password;
+    }
+
+    // New: ROOTADMIN can create SUPERADMINs
+    @Data
+    public static class CreateSuperAdminRequest {
+        @NotBlank
+        private String name;
+        @Email
+        @NotBlank
+        private String email;
+        @NotBlank
+        @Size(min = 6)
+        private String password;
+    }
 }

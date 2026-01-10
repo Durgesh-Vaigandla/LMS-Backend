@@ -22,20 +22,20 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
     }
 
-    public User initSuperAdmin(AuthDtos.InitSuperAdminRequest req) {
-        if (userRepository.existsByType(UserType.SUPERADMIN)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Superadmin already exists");
+    public User initRootAdmin(AuthDtos.InitRootAdminRequest req) {
+        if (userRepository.existsByType(UserType.ROOTADMIN)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rootadmin already exists");
         }
         if (userRepository.findByEmail(req.getEmail()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
         }
-        User superAdmin = User.builder()
+        User rootAdmin = User.builder()
                 .name(req.getName())
                 .email(req.getEmail())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
-                .type(UserType.SUPERADMIN)
+                .type(UserType.ROOTADMIN)
                 .build();
-        return userRepository.save(superAdmin);
+        return userRepository.save(rootAdmin);
     }
 
     public String login(AuthDtos.LoginRequest req) {
@@ -68,8 +68,8 @@ public class AuthService {
 
     public User createUser(String requesterEmail, AuthDtos.CreateUserRequest req) {
         User requester = requireUser(requesterEmail);
-        if (requester.getType() != UserType.SUPERADMIN && requester.getType() != UserType.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admin or superadmin can create users");
+        if (requester.getType() != UserType.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admin can create users");
         }
         if (userRepository.findByEmail(req.getEmail()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
@@ -83,6 +83,24 @@ public class AuthService {
                 .createdBy(requester)
                 .build();
         return userRepository.save(user);
+    }
+
+    public User createSuperAdmin(String requesterEmail, AuthDtos.CreateSuperAdminRequest req) {
+        User requester = requireUser(requesterEmail);
+        if (requester.getType() != UserType.ROOTADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only rootadmin can create superadmins");
+        }
+        if (userRepository.findByEmail(req.getEmail()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already in use");
+        }
+        User superAdmin = User.builder()
+                .name(req.getName())
+                .email(req.getEmail())
+                .passwordHash(passwordEncoder.encode(req.getPassword()))
+                .type(UserType.SUPERADMIN)
+                .createdBy(requester)
+                .build();
+        return userRepository.save(superAdmin);
     }
 
     public User getByEmail(String email) {

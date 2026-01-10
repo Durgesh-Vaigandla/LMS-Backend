@@ -42,7 +42,7 @@ public class UserController {
         User requester = authService.getByEmail(email);
         
         // Only SUPERADMIN and ADMIN can view all users
-        if (requester.getType() != UserType.SUPERADMIN && requester.getType() != UserType.ADMIN) {
+        if (requester.getType() != UserType.ROOTADMIN && requester.getType() != UserType.SUPERADMIN && requester.getType() != UserType.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admins can view all users");
         }
         

@@ -21,12 +21,12 @@ public class AuthController {
         this.authService = authService;
     }
 
-    // One-time endpoint to create the first superadmin (only if none exists)
-    @PostMapping("/init-superadmin")
-    public ResponseEntity<ApiResponse<Void>> initSuperAdmin(@Valid @RequestBody AuthDtos.InitSuperAdminRequest req) {
-        authService.initSuperAdmin(req);
+    // One-time endpoint to create the first rootadmin (only if none exists)
+    @PostMapping("/init-rootadmin")
+    public ResponseEntity<ApiResponse<Void>> initRootAdmin(@Valid @RequestBody AuthDtos.InitRootAdminRequest req) {
+        authService.initRootAdmin(req);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Superadmin created successfully"));
+                .body(ApiResponse.ok("Rootadmin created successfully"));
     }
 
     @PostMapping("/login")
@@ -45,6 +45,18 @@ public class AuthController {
         authService.createAdmin(requesterEmail, req);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Admin created successfully"));
+    }
+
+    @PostMapping("/create-superadmin")
+    public ResponseEntity<ApiResponse<Void>> createSuperAdmin(Authentication authentication,
+                                                @Valid @RequestBody AuthDtos.CreateSuperAdminRequest req) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body(ApiResponse.fail("Unauthorized"));
+        }
+        String requesterEmail = (String) authentication.getPrincipal();
+        authService.createSuperAdmin(requesterEmail, req);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Superadmin created successfully"));
     }
 
     @PostMapping("/create-user")

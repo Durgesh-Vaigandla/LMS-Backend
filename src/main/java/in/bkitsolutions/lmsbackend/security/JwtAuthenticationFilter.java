@@ -34,12 +34,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String email = jwtUtil.validateAndGetEmail(token);
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 // Optionally ensure user still exists
-                if (userRepository.findByEmail(email).isPresent()) {
+//                if (userRepository.findByEmail(email).isPresent()) {
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                             email, null, java.util.Collections.emptyList());
                     auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(auth);
-                }
+//                }
             }
         }
         filterChain.doFilter(request, response);
