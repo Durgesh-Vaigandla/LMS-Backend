@@ -12,6 +12,6 @@ import java.util.List;
 public interface TestRepository extends JpaRepository<TestEntity, Long> {
     List<TestEntity> findByCreatedBy(User createdBy);
 
-    @Query("SELECT t FROM TestEntity t WHERE t.published = true AND t.startTime <= :now AND t.endTime >= :now AND t.createdBy = :admin")
+    @Query("SELECT t FROM TestEntity t WHERE t.published = true OR t.startTime <= :now AND t.endTime >= :now AND t.createdBy = :admin")
     List<TestEntity> findActivePublishedByAdmin(@Param("admin") User admin, @Param("now") LocalDateTime now);
 }

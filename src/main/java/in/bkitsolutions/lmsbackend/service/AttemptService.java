@@ -2,6 +2,7 @@ package in.bkitsolutions.lmsbackend.service;
 
 import in.bkitsolutions.lmsbackend.model.*;
 import in.bkitsolutions.lmsbackend.repository.*;
+import in.bkitsolutions.lmsbackend.dto.AttemptDtos;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -61,24 +62,34 @@ public class AttemptService {
         ensureActiveWindow(test);
 
         int maxAttempts = (test.getMaxAttempts() == null || test.getMaxAttempts() <= 0) ? 1 : test.getMaxAttempts();
-        int lastAttemptNumber = testAttemptRepository
-                .findTopByTestAndStudentOrderByAttemptNumberDesc(test, requester)
-                .map(TestAttempt::getAttemptNumber).orElse(0);
-        if (lastAttemptNumber >= maxAttempts) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Max attempts reached");
+        Optional<TestAttempt> existingOpt = testAttemptRepository
+                .findTopByTestAndStudentOrderByAttemptNumberDesc(test, requester);
+
+        if (existingOpt.isPresent()) {
+            TestAttempt attempt = existingOpt.get();
+            int currentAttempt = attempt.getAttemptNumber() == null ? 0 : attempt.getAttemptNumber();
+            if (currentAttempt >= maxAttempts) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Max attempts reached");
+            }
+            // Per requirements: increment attempt number on each POST, do not reset any fields
+            attempt.setAttemptNumber(currentAttempt + 1);
+            // updatedAt will be auto-updated by @UpdateTimestamp
+            return testAttemptRepository.save(attempt);
+        } else {
+            // First time: create row with attemptNumber=1
+            TestAttempt attempt = TestAttempt.builder()
+                    .test(test)
+                    .student(requester)
+                    .attemptNumber(1)
+                    .startedAt(LocalDateTime.now())
+                    .completed(false)
+                    .score(0)
+                    .build();
+            return testAttemptRepository.save(attempt);
         }
-        TestAttempt attempt = TestAttempt.builder()
-                .test(test)
-                .student(requester)
-                .attemptNumber(lastAttemptNumber + 1)
-                .startedAt(LocalDateTime.now())
-                .completed(false)
-                .score(0)
-                .build();
-        return testAttemptRepository.save(attempt);
     }
 
-    public Answer submitOrUpdateAnswer(String requesterEmail, Long attemptId, Long questionId, String answerText) {
+    public void submitOrUpdateAnswer(String requesterEmail, Long attemptId, Long questionId, String answerText) {
         User requester = requireUser(requesterEmail);
         TestAttempt attempt = testAttemptRepository.findById(attemptId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
@@ -103,7 +114,7 @@ public class AttemptService {
                 .orElse(Answer.builder().attempt(attempt).question(question).build());
         answer.setAnswerText(answerText);
         answer.setCorrect(isCorrect);
-        return answerRepository.save(answer);
+        answerRepository.save(answer);
     }
 
     public TestAttempt submitAttempt(String requesterEmail, Long attemptId) {
@@ -132,6 +143,97 @@ public class AttemptService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your attempt");
         }
         return attempt;
+    }
+
+    public AttemptDtos.AttemptStateResponse getAttemptState(String requesterEmail, Long attemptId) {
+        User requester = requireUser(requesterEmail);
+        TestAttempt attempt = testAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
+        if (requester.getType() == UserType.USER && !attempt.getStudent().getId().equals(requester.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your attempt");
+        }
+        return buildAttemptStateResponse(attempt);
+    }
+
+    public AttemptDtos.AttemptStateResponse getAttemptStateByTest(String requesterEmail, Long testId) {
+        User requester = requireUser(requesterEmail);
+        if (requester.getType() != UserType.USER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only users can view their attempt state");
+        }
+        TestEntity test = testRepository.findById(testId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
+        // Ensure the test is assigned to the same admin that created the user
+        User admin = requester.getCreatedBy();
+        if (admin == null || !admin.getId().equals(test.getCreatedBy().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not assigned to you");
+        }
+
+        TestAttempt attempt = testAttemptRepository
+                .findTopByTestAndStudentOrderByAttemptNumberDesc(test, requester)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attempt not found"));
+
+        return buildAttemptStateResponse(attempt);
+    }
+
+    private AttemptDtos.AttemptStateResponse buildAttemptStateResponse(TestAttempt attempt) {
+        TestEntity test = attempt.getTest();
+        // Fetch questions for this test
+        List<Question> questions = questionRepository.findByTest(test);
+        // Fetch saved answers for this attempt
+        List<Answer> answers = answerRepository.findByAttempt(attempt);
+
+        // Build DTOs
+        AttemptDtos.AttemptInfo info = new AttemptDtos.AttemptInfo(
+                attempt.getId(),
+                attempt.getAttemptNumber(),
+                attempt.getCompleted(),
+                attempt.getStartedAt() == null ? null : attempt.getStartedAt().toString(),
+                attempt.getSubmittedAt() == null ? null : attempt.getSubmittedAt().toString(),
+                attempt.getUpdatedAt() == null ? null : attempt.getUpdatedAt().toString()
+        );
+
+        List<AttemptDtos.QuestionItem> questionItems = questions.stream().map(q -> new AttemptDtos.QuestionItem(
+                q.getId(),
+                q.getQuestionType() == null ? null : q.getQuestionType().name(),
+                q.getQuestionText(),
+                q.getMarks(),
+                q.getNegativeMarks(),
+                q.getOptionA(),
+                q.getOptionB(),
+                q.getOptionC(),
+                q.getOptionD()
+        )).toList();
+
+        Map<Long, String> ansMap = new HashMap<>();
+        for (Answer a : answers) {
+            if (a.getQuestion() != null) {
+                ansMap.put(a.getQuestion().getId(), a.getAnswerText());
+            }
+        }
+
+        return new AttemptDtos.AttemptStateResponse(info, questionItems, ansMap);
+    }
+
+    public Optional<TestAttempt> getLatestAttemptForUser(String requesterEmail, Long testId, boolean onlyIncomplete) {
+        User requester = requireUser(requesterEmail);
+        if (requester.getType() != UserType.USER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only users can query their attempts");
+        }
+        TestEntity test = testRepository.findById(testId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
+        // Ensure the test belongs to the same admin
+        User admin = requester.getCreatedBy();
+        if (admin == null || !admin.getId().equals(test.getCreatedBy().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not assigned to you");
+        }
+
+        Optional<TestAttempt> latest = testAttemptRepository.findTopByTestAndStudentOrderByAttemptNumberDesc(test, requester);
+        if (onlyIncomplete) {
+            if (latest.isPresent() && Boolean.TRUE.equals(latest.get().getCompleted())) {
+                return Optional.empty();
+            }
+        }
+        return latest;
     }
 
     private int computeScore(TestAttempt attempt) {

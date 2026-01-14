@@ -26,7 +26,8 @@ public class AttemptController {
                                                                  @Valid @RequestBody(required = false) AttemptDtos.StartAttemptRequest req) {
         String email = (String) auth.getPrincipal();
         TestAttempt attempt = attemptService.startAttempt(email, testId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Attempt started", attempt));
+        // As per requirement: return 200 OK even when updating existing attempt
+        return ResponseEntity.ok(ApiResponse.ok("Attempt started", attempt));
     }
 
     @PostMapping("/attempts/{attemptId}/answers")
@@ -34,8 +35,8 @@ public class AttemptController {
                                                             @PathVariable Long attemptId,
                                                             @Valid @RequestBody AttemptDtos.SubmitAnswerRequest req) {
         String email = (String) auth.getPrincipal();
-        Answer ans = attemptService.submitOrUpdateAnswer(email, attemptId, req.getQuestionId(), req.getAnswerText());
-        return ResponseEntity.ok(ApiResponse.ok("Answer saved", ans));
+        attemptService.submitOrUpdateAnswer(email, attemptId, req.getQuestionId(), req.getAnswerText());
+        return ResponseEntity.ok(ApiResponse.ok("Answer saved successfully"));
     }
 
     @PostMapping("/attempts/{attemptId}/submit")
@@ -51,4 +52,25 @@ public class AttemptController {
         TestAttempt ta = attemptService.getAttempt(email, attemptId);
         return ResponseEntity.ok(ApiResponse.ok("Attempt", ta));
     }
+
+    // Resume endpoint (new): get full attempt state using current user (from JWT) + testId
+    // This avoids needing attemptId on the client side.
+    @GetMapping("/tests/{testId}/attempts/me/state")
+    public ResponseEntity<ApiResponse<AttemptDtos.AttemptStateResponse>> getMyAttemptState(Authentication auth,
+                                                                                           @PathVariable Long testId) {
+        String email = (String) auth.getPrincipal();
+        AttemptDtos.AttemptStateResponse state = attemptService.getAttemptStateByTest(email, testId);
+        return ResponseEntity.ok(ApiResponse.ok("Attempt state", state));
+    }
+
+//    // Discover endpoint: latest attempt for current user on a test (optionally only incomplete)
+//    @GetMapping("/tests/{testId}/attempts/me/latest")
+//    public ResponseEntity<ApiResponse<TestAttempt>> getLatestAttemptForMe(Authentication auth,
+//                                                                          @PathVariable Long testId,
+//                                                                          @RequestParam(name = "onlyIncomplete", required = false, defaultValue = "true") boolean onlyIncomplete) {
+//        String email = (String) auth.getPrincipal();
+//        return attemptService.getLatestAttemptForUser(email, testId, onlyIncomplete)
+//                .map(attempt -> ResponseEntity.ok(ApiResponse.ok("Latest attempt", attempt)))
+//                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail("No attempt found")));
+//    }
 }

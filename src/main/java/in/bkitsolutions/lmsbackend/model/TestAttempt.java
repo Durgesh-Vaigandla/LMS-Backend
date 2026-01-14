@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "test_attempts")
@@ -35,4 +36,7 @@ public class TestAttempt {
     private Integer score;
 
     private Boolean completed;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

@@ -52,7 +52,8 @@ public class QuestionService {
 
     public List<Question> listQuestions(String requesterEmail, Long testId) {
         User requester = requireUser(requesterEmail);
-        TestEntity t = requireOwnedTest(requester, testId);
+        TestEntity t = testRepository.findById(testId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
         return questionRepository.findByTest(t);
     }
 
