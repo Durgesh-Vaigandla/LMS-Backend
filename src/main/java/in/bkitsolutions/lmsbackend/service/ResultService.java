@@ -64,4 +64,26 @@ public class ResultService {
         }
         return testAttemptRepository.findByStudent(requester);
     }
+
+    public void deleteResult(String requesterEmail, Long resultId) {
+        User requester = requireUser(requesterEmail);
+        TestAttempt attempt = testAttemptRepository.findById(resultId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Result not found"));
+        
+        // Allow delete if Superadmin OR if Admin who created the test
+        boolean allowed = false;
+        if (requester.getType() == UserType.SUPERADMIN) {
+            allowed = true;
+        } else if (requester.getType() == UserType.ADMIN) {
+            if (attempt.getTest().getCreatedBy().getId().equals(requester.getId())) {
+                allowed = true;
+            }
+        }
+
+        if (!allowed) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to delete this result");
+        }
+
+        testAttemptRepository.delete(attempt);
+    }
 }

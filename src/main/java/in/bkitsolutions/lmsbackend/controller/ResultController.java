@@ -41,4 +41,11 @@ public class ResultController {
         List<TestAttempt> list = resultService.myResults(email);
         return ResponseEntity.ok(ApiResponse.ok("My results", list));
     }
+
+    @DeleteMapping("/results/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(Authentication auth, @PathVariable Long id) {
+        String email = (String) auth.getPrincipal();
+        resultService.deleteResult(email, id);
+        return ResponseEntity.ok(ApiResponse.ok("Result deleted"));
+    }
 }

@@ -34,7 +34,12 @@ public class AttemptService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 
-    private void ensureActiveWindow(TestEntity test) {
+    private void ensureActiveWindow(TestEntity test, User requester) {
+        // Admins/SuperAdmins can bypass window checks for previewing
+        if (requester.getType() != UserType.USER) {
+            return;
+        }
+
         LocalDateTime now = LocalDateTime.now();
         if (Boolean.FALSE.equals(test.getPublished())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not published");
@@ -49,17 +54,21 @@ public class AttemptService {
 
     public TestAttempt startAttempt(String requesterEmail, Long testId) {
         User requester = requireUser(requesterEmail);
-        if (requester.getType() != UserType.USER) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only users can start attempts");
-        }
+        // Allow Users, Admins, and SuperAdmins to start/preview attempts
+        // if (requester.getType() != UserType.USER) {
+        //     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only users can start attempts");
+        // }
+        
         TestEntity test = testRepository.findById(testId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
-        // Only tests created by student's admin are visible
-        User admin = requester.getCreatedBy();
-        if (admin == null || !admin.getId().equals(test.getCreatedBy().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not assigned to you");
-        }
-        ensureActiveWindow(test);
+        
+        // RELAXED: Removed strict ownership check to allow easier testing/hackathon usage
+        // User admin = requester.getCreatedBy();
+        // if (admin == null || !admin.getId().equals(test.getCreatedBy().getId())) {
+        //     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Test not assigned to you");
+        // }
+        
+        ensureActiveWindow(test, requester);
 
         int maxAttempts = (test.getMaxAttempts() == null || test.getMaxAttempts() <= 0) ? 1 : test.getMaxAttempts();
         Optional<TestAttempt> existingOpt = testAttemptRepository
@@ -101,7 +110,7 @@ public class AttemptService {
         }
         TestEntity test = attempt.getTest();
         // Only allow answering while test is active
-        ensureActiveWindow(test);
+        ensureActiveWindow(test, requester);
 
         Question question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question not found"));

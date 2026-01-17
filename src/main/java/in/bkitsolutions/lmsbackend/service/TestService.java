@@ -116,4 +116,10 @@ public class TestService {
         }
         return t;
     }
+
+    public void deleteTest(String requesterEmail, Long testId) {
+        // reuse requireOwnedTest to check permission
+        TestEntity t = requireOwnedTest(requesterEmail, testId, true);
+        testRepository.delete(t);
+    }
 }

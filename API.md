@@ -150,6 +150,12 @@ GET /api/tests/available
 Authorization: Bearer ${JOHN_TOKEN}
 ```
 
+#### 2.6 Delete a test
+```
+DELETE /api/tests/{id}
+Authorization: Bearer ${ADMIN_TOKEN}
+```
+
 ---
 
 ### 3) Questions (ADMIN or SUPERADMIN)
@@ -318,6 +324,13 @@ GET /api/attempts/{attemptId}/session-report
 Authorization: Bearer ${ADMIN_TOKEN}   # or JOHN_TOKEN
 ```
 
+#### 5.4 Get attempt state (Snapshot)
+Used for resuming or checking status before/during test.
+```
+GET /api/tests/{testId}/attempts/me/state
+Authorization: Bearer ${JOHN_TOKEN}
+```
+
 ---
 
 ### 6) Results
@@ -340,10 +353,16 @@ GET /api/me/results
 Authorization: Bearer ${JOHN_TOKEN}
 ```
 
+#### 6.4 Delete result (Admin/Superadmin)
+```
+DELETE /api/results/{id}
+Authorization: Bearer ${ADMIN_TOKEN}
+```
+
 ---
 
 ### Notes and validation rules to keep in mind
-- Visibility: Students only see tests created by their own Admin and only when `published=true` and `now ∈ [startTime, endTime]`.
+- Visibility: Relaxed rules; Students can see available tests. Admins can preview tests.
 - Attempts: Max attempts default to 1 if not set or 0; enforced on start.
 - Answer correctness:
     - MCQ single: `answerText` must be `A|B|C|D` (case-insensitive).

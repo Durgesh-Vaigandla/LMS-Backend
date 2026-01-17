@@ -60,4 +60,11 @@ public class TestController {
         List<TestEntity> tests = testService.availableForStudent(email);
         return ResponseEntity.ok(ApiResponse.ok("Available tests", tests));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(Authentication auth, @PathVariable Long id) {
+        String email = (String) auth.getPrincipal();
+        testService.deleteTest(email, id);
+        return ResponseEntity.ok(ApiResponse.ok("Test deleted"));
+    }
 }
