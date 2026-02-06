@@ -29,7 +29,7 @@ public class TestService {
 
     public TestEntity createTest(String requesterEmail, String title, String description,
                                  LocalDateTime startTime, LocalDateTime endTime,
-                                 Integer totalMarks, Boolean published, Integer maxAttempts) {
+                                 Integer totalMarks, Boolean published, Integer maxAttempts, Boolean proctored) {
         User requester = requireUser(requesterEmail);
         if (requester.getType() != UserType.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only admin can create tests");
@@ -46,12 +46,13 @@ public class TestService {
                 .totalMarks(totalMarks)
                 .published(Boolean.TRUE.equals(published))
                 .maxAttempts((maxAttempts == null || maxAttempts <= 0) ? 1 : maxAttempts)
+                .proctored(Boolean.TRUE.equals(proctored))
                 .build();
         return testRepository.save(t);
     }
 
     public TestEntity updateTimesAndMeta(String requesterEmail, Long testId, String title, String description,
-                                         LocalDateTime startTime, LocalDateTime endTime, Integer totalMarks) {
+                                         LocalDateTime startTime, LocalDateTime endTime, Integer totalMarks, Integer maxAttempts, Boolean proctored) {
         User requester = requireUser(requesterEmail);
         TestEntity t = testRepository.findById(testId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Test not found"));
@@ -66,6 +67,8 @@ public class TestService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endTime must be after startTime");
         }
         if (totalMarks != null) t.setTotalMarks(totalMarks);
+        if (maxAttempts != null && maxAttempts > 0) t.setMaxAttempts(maxAttempts);
+        if (proctored != null) t.setProctored(proctored);
         return testRepository.save(t);
     }
 
@@ -121,5 +124,14 @@ public class TestService {
         // reuse requireOwnedTest to check permission
         TestEntity t = requireOwnedTest(requesterEmail, testId, true);
         testRepository.delete(t);
+    }
+
+    public void recalculateTotalMarks(Long testId) {
+        TestEntity test = testRepository.findById(testId).orElse(null);
+        if (test != null) {
+            int total = test.getQuestions().stream().mapToInt(q -> q.getMarks() != null ? q.getMarks() : 0).sum();
+            test.setTotalMarks(total);
+            testRepository.save(test);
+        }
     }
 }

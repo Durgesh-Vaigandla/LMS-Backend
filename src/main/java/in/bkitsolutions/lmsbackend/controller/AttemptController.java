@@ -63,14 +63,14 @@ public class AttemptController {
         return ResponseEntity.ok(ApiResponse.ok("Attempt state", state));
     }
 
-//    // Discover endpoint: latest attempt for current user on a test (optionally only incomplete)
-//    @GetMapping("/tests/{testId}/attempts/me/latest")
-//    public ResponseEntity<ApiResponse<TestAttempt>> getLatestAttemptForMe(Authentication auth,
-//                                                                          @PathVariable Long testId,
-//                                                                          @RequestParam(name = "onlyIncomplete", required = false, defaultValue = "true") boolean onlyIncomplete) {
-//        String email = (String) auth.getPrincipal();
-//        return attemptService.getLatestAttemptForUser(email, testId, onlyIncomplete)
-//                .map(attempt -> ResponseEntity.ok(ApiResponse.ok("Latest attempt", attempt)))
-//                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail("No attempt found")));
-//    }
+    // Discover endpoint: latest attempt for current user on a test (optionally only incomplete)
+    @GetMapping("/tests/{testId}/attempts/me/latest")
+    public ResponseEntity<ApiResponse<TestAttempt>> getLatestAttemptForMe(Authentication auth,
+                                                                          @PathVariable Long testId,
+                                                                          @RequestParam(name = "onlyIncomplete", required = false, defaultValue = "true") boolean onlyIncomplete) {
+        String email = (String) auth.getPrincipal();
+        return attemptService.getLatestAttemptForUser(email, testId, onlyIncomplete)
+                .map(attempt -> ResponseEntity.ok(ApiResponse.ok("Latest attempt", attempt)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.fail("No attempt found")));
+    }
 }

@@ -78,12 +78,14 @@ public class QuestionService {
         return questionRepository.save(q);
     }
 
-    public void deleteQuestion(String requesterEmail, Long questionId) {
+    public Long deleteQuestion(String requesterEmail, Long questionId) {
         User requester = requireUser(requesterEmail);
         Question q = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question not found"));
         requireOwnedTest(requester, q.getTest().getId());
+        Long testId = q.getTest().getId();
         questionRepository.delete(q);
+        return testId;
     }
 
     private void validateQuestion(Question q) {

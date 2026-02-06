@@ -59,6 +59,11 @@ public class AuthController {
                 .body(ApiResponse.ok("Superadmin created successfully"));
     }
 
+    @GetMapping("/public/ping")
+    public ResponseEntity<String> ping() {
+        return ResponseEntity.ok("pong");
+    }
+
     @PostMapping("/create-user")
     public ResponseEntity<ApiResponse<Void>> createUser(Authentication authentication,
                                            @Valid @RequestBody AuthDtos.CreateUserRequest req) {

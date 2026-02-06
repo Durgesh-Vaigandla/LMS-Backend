@@ -44,4 +44,8 @@ public class Question {
 
     // For fill-in-the-blank
     private String correctAnswer;
+
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.util.List<Answer> answers = new java.util.ArrayList<>();
 }

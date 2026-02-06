@@ -47,6 +47,7 @@ public class AttemptDtos {
         private String startedAt;   // ISO string for simplicity in client
         private String submittedAt;  // may be null
         private String updatedAt;    // auto-updated
+        private Boolean proctored;   // Whether this test requires proctoring
     }
 
     @Data

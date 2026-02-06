@@ -5,6 +5,7 @@ import in.bkitsolutions.lmsbackend.dto.QuestionDtos;
 import in.bkitsolutions.lmsbackend.model.Question;
 import in.bkitsolutions.lmsbackend.model.QuestionType;
 import in.bkitsolutions.lmsbackend.service.QuestionService;
+import in.bkitsolutions.lmsbackend.service.TestService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,9 +18,11 @@ import java.util.List;
 @RequestMapping("/api")
 public class QuestionController {
     private final QuestionService questionService;
+    private final TestService testService;
 
-    public QuestionController(QuestionService questionService) {
+    public QuestionController(QuestionService questionService, TestService testService) {
         this.questionService = questionService;
+        this.testService = testService;
     }
 
     @PostMapping("/tests/{testId}/questions")
@@ -29,6 +32,7 @@ public class QuestionController {
         String email = (String) auth.getPrincipal();
         Question q = fromDto(req);
         Question saved = questionService.addQuestion(email, testId, q);
+        testService.recalculateTotalMarks(testId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Question created", saved));
     }
 
@@ -46,13 +50,15 @@ public class QuestionController {
         String email = (String) auth.getPrincipal();
         Question patch = fromDto(req);
         Question updated = questionService.updateQuestion(email, questionId, patch);
+        testService.recalculateTotalMarks(updated.getTest().getId());
         return ResponseEntity.ok(ApiResponse.ok("Question updated", updated));
     }
 
     @DeleteMapping("/questions/{questionId}")
     public ResponseEntity<ApiResponse<Void>> deleteQuestion(Authentication auth, @PathVariable Long questionId) {
         String email = (String) auth.getPrincipal();
-        questionService.deleteQuestion(email, questionId);
+        Long testId = questionService.deleteQuestion(email, questionId);
+        testService.recalculateTotalMarks(testId);
         return ResponseEntity.ok(ApiResponse.ok("Question deleted"));
     }
 

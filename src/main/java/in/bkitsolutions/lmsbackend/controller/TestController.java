@@ -26,7 +26,7 @@ public class TestController {
                                                           @Valid @RequestBody TestDtos.CreateTestRequest req) {
         String email = (String) auth.getPrincipal();
         TestEntity t = testService.createTest(email, req.getTitle(), req.getDescription(),
-                req.getStartTime(), req.getEndTime(), req.getTotalMarks(), req.getPublished(), req.getMaxAttempts());
+                req.getStartTime(), req.getEndTime(), req.getTotalMarks(), req.getPublished(), req.getMaxAttempts(), req.getProctored());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Test created", t));
     }
 
@@ -36,7 +36,7 @@ public class TestController {
                                                           @Valid @RequestBody TestDtos.UpdateTestRequest req) {
         String email = (String) auth.getPrincipal();
         TestEntity t = testService.updateTimesAndMeta(email, id, req.getTitle(), req.getDescription(),
-                req.getStartTime(), req.getEndTime(), req.getTotalMarks());
+                req.getStartTime(), req.getEndTime(), req.getTotalMarks(), req.getMaxAttempts(), req.getProctored());
         return ResponseEntity.ok(ApiResponse.ok("Test updated", t));
     }
 

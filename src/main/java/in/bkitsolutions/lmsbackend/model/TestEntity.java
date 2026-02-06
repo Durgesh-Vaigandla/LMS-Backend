@@ -35,4 +35,15 @@ public class TestEntity {
     private Boolean published;
 
     private Integer maxAttempts;
+    
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
+    private Boolean proctored = false; // Whether test requires proctoring
+
+    @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.util.List<Question> questions;
+
+    @OneToMany(mappedBy = "test", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.util.List<TestAttempt> testAttempts;
 }
